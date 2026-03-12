@@ -63,6 +63,7 @@ const app = Vue.createApp({
             updateVersions:    { running: {}, current: {}, forthcoming: {} },
             updateNotify:      "",
             updateNotifyTimer: null,
+            _pollTimer:        null,
             updateNotifyBlink: false,
             updateProgress:    0,
             updateError:       null,
@@ -135,7 +136,7 @@ const app = Vue.createApp({
         /*  fallback: poll config version every 10s and sync if main process has newer data;
             this catches any missed or failed browsers-refresh events  */
         this._lastConfigVersion = -1
-        setInterval(async () => {
+        this._pollTimer = setInterval(async () => {
             try {
                 const v = await electron.ipcRenderer.invoke("configs-version")
                 if (v !== this._lastConfigVersion) {
@@ -327,8 +328,8 @@ const app = Vue.createApp({
                 this.updateNotifyTimer = setInterval(() => {
                     this.updateNotifyBlink = !this.updateNotifyBlink
                 }, this.updateNotify === "soft" ? 1200 : 300)
-            else if (this.updateNotify === "" && this.updateTimer !== null) {
-                clearTimeout(this.updateNotifyTimer)
+            else if (this.updateNotify === "" && this.updateNotifyTimer !== null) {
+                clearInterval(this.updateNotifyTimer)
                 this.updateNotifyTimer = null
                 this.updateNotifyBlink = false
             }
@@ -354,6 +355,16 @@ const app = Vue.createApp({
         setTimeout(() => {
             this.updateCheck()
         }, 2000)
+    },
+    beforeUnmount () {
+        if (this._pollTimer !== null) {
+            clearInterval(this._pollTimer)
+            this._pollTimer = null
+        }
+        if (this.updateNotifyTimer !== null) {
+            clearInterval(this.updateNotifyTimer)
+            this.updateNotifyTimer = null
+        }
     },
     methods: {
         renderDisplayIcons () {

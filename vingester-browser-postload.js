@@ -83,7 +83,7 @@
                     const gain = ac.createGain()
                     gain.gain.setValueAtTime(0, ac.currentTime)
                     gain.connect(dest)
-                    const osc = ac.createOscillator()
+                    osc = ac.createOscillator()
                     osc.connect(gain)
                     osc.start()
                 }
@@ -98,6 +98,7 @@
                 standard OPUS encoding it does not. So, we intentionally have to stay with OPUS here,
                 even if it causes extra decoding performance and theoretically (but not noticable)
                 is also a lossy intermediate step.  */
+            let osc      = null
             let recorder = null
             if (vingester.cfg.N && parseInt(vingester.cfg.C) > 0) {
                 recorder = new MediaRecorder(dest.stream, {
@@ -278,10 +279,17 @@
 
             /*  pure all existing nodes on document unload  */
             window.addEventListener("beforeunload", () => {
+                observer.disconnect()
                 vingester.log("unloading")
                 const els = document.querySelectorAll("audio, video")
                 for (const el of els)
                     detach("unload", el)
+                if (recorder && recorder.state !== "inactive")
+                    recorder.stop()
+                if (osc)
+                    osc.stop()
+                if (ac && ac.state !== "closed")
+                    ac.close()
                 vingester.log("unloaded")
             }, { capture: true })
         }
