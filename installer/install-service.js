@@ -134,14 +134,19 @@ if (action === "install") {
         console.error("  3. Re-run this installer as Administrator")
         process.exit(1)
     }
+    /*  base flags always passed in service mode  */
+    const baseArgs = "--headless --autostart"
+    const svcArgs  = extraArgs ? `${baseArgs} ${extraArgs}` : baseArgs
+
     console.log(`Installing Windows service: "${svcName}"`)
     console.log(`  Executable: ${exePath}`)
-    console.log(`  Arguments:  ${extraArgs}`)
+    console.log(`  Arguments:  ${svcArgs}`)
+    console.log(`  Web UI:     http://localhost:7212`)
     console.log("")
 
     /*  install the service  */
     run(`${nssm} install "${svcName}" "${exePath}"`)
-    run(`${nssm} set "${svcName}" AppParameters "${extraArgs}"`)
+    run(`${nssm} set "${svcName}" AppParameters "${svcArgs}"`)
 
     /*  configure crash recovery: restart on failure  */
     run(`${nssm} set "${svcName}" AppExit Default Restart`)
@@ -167,6 +172,7 @@ if (action === "install") {
 
     console.log("")
     console.log(`SUCCESS: Service "${svcName}" installed and started.`)
+    console.log(`Manage via web browser at: http://localhost:7212`)
     console.log(`Use "sc query ${svcName}" to check status.`)
     console.log(`Use "node install-service.js uninstall" to remove.`)
 }

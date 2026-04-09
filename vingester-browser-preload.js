@@ -27,7 +27,8 @@
             log.info(...args)
         },
         stat (data) {
-            electron.ipcRenderer.sendTo(cfg.controlId, "stat", data)
+            if (cfg.controlId)
+                electron.ipcRenderer.sendTo(cfg.controlId, "stat", data)
         },
         async audioCapture (data) {
             electron.ipcRenderer.sendTo(cfg.workerId, "audio-capture", data)

@@ -700,6 +700,59 @@
         }
         .media-delete:hover { color: var(--danger); }
 
+        /* ── SETTINGS ───────────────────────────────────────────── */
+        .settings-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 14px;
+        }
+        .settings-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+        }
+        .settings-note {
+            font-size: 11px;
+            color: var(--text-subtle);
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+        .settings-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .settings-row:last-child { margin-bottom: 0; }
+        .settings-label {
+            width: 100px;
+            font-size: 12px;
+            color: var(--text-subtle);
+            flex-shrink: 0;
+        }
+        .settings-input {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 12px;
+            padding: 4px 8px;
+            width: 220px;
+        }
+        .settings-input-short { width: 80px; }
+        .settings-input-wide  { width: 320px; }
+        .settings-input:focus { outline: none; border-color: var(--accent); }
+        .settings-status {
+            font-size: 11px;
+            color: var(--text-subtle);
+            margin-left: 8px;
+        }
+
         /* ── STATUS BAR ──────────────────────────────────────────── */
         #status-bar {
             background: var(--surface);
@@ -773,6 +826,7 @@
 <div id="tab-bar">
     <div class="tab-btn active" data-action="switchTab" data-panel="instances">Instances</div>
     <div class="tab-btn" data-action="switchTab" data-panel="media">Media</div>
+    <div class="tab-btn" data-action="switchTab" data-panel="settings">&#9881; Settings</div>
 </div>
 
 <!-- ── PANELS ──────────────────────────────────────────────────── -->
@@ -822,6 +876,108 @@
             No media files yet.
         </div>
         <div id="media-grid" class="media-grid" style="display:none"></div>
+    </div>
+
+    <!-- Settings panel -->
+    <div id="panel-settings" class="panel">
+        <div id="err-settings" class="error-banner"></div>
+
+        <!-- REST API -->
+        <div class="settings-section">
+            <div class="settings-section-title">REST API</div>
+            <div class="settings-row">
+                <label class="settings-label">Enabled</label>
+                <input type="checkbox" id="cfg-api-enabled" onchange="Settings.save()">
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">Address</label>
+                <input type="text" id="cfg-api-addr" class="settings-input" placeholder="127.0.0.1" onchange="Settings.save()">
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">Port</label>
+                <input type="number" id="cfg-api-port" class="settings-input settings-input-short" placeholder="7211" onchange="Settings.save()">
+            </div>
+        </div>
+
+        <!-- Web UI -->
+        <div class="settings-section">
+            <div class="settings-section-title">Web UI</div>
+            <div class="settings-note">Address and port changes take effect after restart.</div>
+            <div class="settings-row">
+                <label class="settings-label">Address</label>
+                <input type="text" id="cfg-webui-addr" class="settings-input" placeholder="0.0.0.0" onchange="Settings.save()">
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">Port</label>
+                <input type="number" id="cfg-webui-port" class="settings-input settings-input-short" placeholder="7212" onchange="Settings.save()">
+            </div>
+        </div>
+
+        <!-- Syslog -->
+        <div class="settings-section">
+            <div class="settings-section-title">Syslog (UDP)</div>
+            <div class="settings-row">
+                <label class="settings-label">Enabled</label>
+                <input type="checkbox" id="cfg-syslog-enabled" onchange="Settings.save()">
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">IP Address</label>
+                <input type="text" id="cfg-syslog-ip" class="settings-input" placeholder="127.0.0.1" onchange="Settings.save()">
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">Port</label>
+                <input type="number" id="cfg-syslog-port" class="settings-input settings-input-short" placeholder="514" onchange="Settings.save()">
+            </div>
+        </div>
+
+        <!-- Autosave -->
+        <div class="settings-section">
+            <div class="settings-section-title">Autosave</div>
+            <div class="settings-row">
+                <label class="settings-label">File Path</label>
+                <input type="text" id="cfg-autosave-file" class="settings-input settings-input-wide" placeholder="/path/to/autosave.yaml" onchange="Settings.save()">
+            </div>
+            <div class="settings-row">
+                <label class="settings-label"></label>
+                <button class="btn btn-reload" onclick="Settings.autosaveNow()">&#9654; Save Now</button>
+                <span id="cfg-autosave-status" class="settings-status"></span>
+            </div>
+        </div>
+
+        <!-- GPU -->
+        <div class="settings-section">
+            <div class="settings-section-title">GPU Acceleration</div>
+            <div class="settings-note">GPU change takes effect after restart.</div>
+            <div class="settings-row">
+                <label class="settings-label">Enabled</label>
+                <input type="checkbox" id="cfg-gpu" onchange="Settings.save()">
+            </div>
+        </div>
+
+        <!-- Configuration -->
+        <div class="settings-section">
+            <div class="settings-section-title">Configuration</div>
+            <div class="settings-row">
+                <label class="settings-label">Export</label>
+                <a id="cfg-export-link" class="btn btn-reload" href="/api/settings/config" download="webretriever-config.yaml">&#11015; Export YAML</a>
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">Import</label>
+                <input type="file" id="cfg-import-file" accept=".yaml,.yml" style="display:none" onchange="Settings.importConfig(this)">
+                <button class="btn btn-reload" onclick="document.getElementById('cfg-import-file').click()">&#11014; Import YAML</button>
+                <span id="cfg-import-status" class="settings-status"></span>
+            </div>
+        </div>
+
+        <!-- Service Controls -->
+        <div class="settings-section">
+            <div class="settings-section-title">Service</div>
+            <div class="settings-row">
+                <label class="settings-label"></label>
+                <button class="btn btn-stop" onclick="Settings.restart()">&#8635; Restart</button>
+                <button class="btn btn-stop" style="margin-left:8px" onclick="Settings.shutdown()">&#9646;&#9646; Shutdown</button>
+            </div>
+        </div>
     </div>
 
 </div><!-- .page -->
@@ -1234,6 +1390,7 @@
         document.getElementById("panel-" + panel).classList.add("active")
         if (panel === "media")     loadMedia()
         if (panel === "instances") loadInstances()
+        if (panel === "settings")  Settings.load()
     }
 
     /* ──────────────────────────────────────────────────────────────
@@ -1975,6 +2132,89 @@
         document.addEventListener("visibilitychange", () => {
             if (!document.hidden) loadInstances()
         })
+    }
+
+    /* ──────────────────────────────────────────────────────────────
+       SETTINGS
+    ────────────────────────────────────────────────────────────── */
+    window.Settings = {
+        async load () {
+            const data = await api("/api/settings")
+            if (!data) return
+            document.getElementById("cfg-api-enabled").checked      = !!data.api.enabled
+            document.getElementById("cfg-api-addr").value           = data.api.addr    || ""
+            document.getElementById("cfg-api-port").value           = data.api.port    || ""
+            document.getElementById("cfg-webui-addr").value         = data.webui.addr  || ""
+            document.getElementById("cfg-webui-port").value         = data.webui.port  || ""
+            document.getElementById("cfg-syslog-enabled").checked   = !!data.syslog.enabled
+            document.getElementById("cfg-syslog-ip").value          = data.syslog.ip   || ""
+            document.getElementById("cfg-syslog-port").value        = data.syslog.port || ""
+            document.getElementById("cfg-autosave-file").value      = data.autosave.file || ""
+            document.getElementById("cfg-gpu").checked              = !!data.gpu
+        },
+        async save () {
+            const body = {
+                api: {
+                    enabled: document.getElementById("cfg-api-enabled").checked,
+                    addr:    document.getElementById("cfg-api-addr").value.trim(),
+                    port:    document.getElementById("cfg-api-port").value.trim()
+                },
+                webui: {
+                    addr: document.getElementById("cfg-webui-addr").value.trim(),
+                    port: document.getElementById("cfg-webui-port").value.trim()
+                },
+                syslog: {
+                    enabled: document.getElementById("cfg-syslog-enabled").checked,
+                    ip:      document.getElementById("cfg-syslog-ip").value.trim(),
+                    port:    parseInt(document.getElementById("cfg-syslog-port").value) || 514
+                },
+                autosave: {
+                    file: document.getElementById("cfg-autosave-file").value.trim()
+                },
+                gpu: document.getElementById("cfg-gpu").checked
+            }
+            await api("/api/settings", { method: "PATCH", body: JSON.stringify(body) })
+        },
+        async autosaveNow () {
+            const r = await api("/api/settings/autosave", { method: "POST" })
+            const el = document.getElementById("cfg-autosave-status")
+            if (r && r.ok) {
+                el.textContent = "Saved"
+                setTimeout(() => { el.textContent = "" }, 3000)
+            }
+        },
+        async importConfig (input) {
+            const file = input.files && input.files[0]
+            if (!file) return
+            const el = document.getElementById("cfg-import-status")
+            el.textContent = "Uploading\u2026"
+            const fd = new FormData()
+            fd.append("config", file)
+            try {
+                const resp = await fetch("/api/settings/config", { method: "POST", body: fd })
+                const r = await resp.json()
+                if (r.ok) {
+                    el.textContent = `Imported ${r.count} instance(s)`
+                    loadInstances()
+                }
+                else {
+                    el.textContent = "Error: " + (r.error || "unknown")
+                }
+            }
+            catch (e) {
+                el.textContent = "Upload failed"
+            }
+            input.value = ""
+            setTimeout(() => { el.textContent = "" }, 4000)
+        },
+        async restart () {
+            if (!confirm("Restart the service now?")) return
+            await api("/api/restart", { method: "POST" })
+        },
+        async shutdown () {
+            if (!confirm("Shut down the service now?")) return
+            await api("/api/shutdown", { method: "POST" })
+        }
     }
 
     /* ──────────────────────────────────────────────────────────────

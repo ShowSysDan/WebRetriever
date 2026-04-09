@@ -83,12 +83,14 @@ module.exports = class Browser {
             if (!this.devToolsEnabled && this.cfg.E) {
                 this.content.webContents.openDevTools({ mode: "detach", activate: true })
                 this.devToolsEnabled = true
-                this.control.webContents.send("devtools", { id: this.id, enabled: true })
+                if (this.control && !this.control.isDestroyed())
+                    this.control.webContents.send("devtools", { id: this.id, enabled: true })
             }
             else if (this.devToolsEnabled && !this.cfg.E) {
                 this.content.webContents.closeDevTools()
                 this.devToolsEnabled = false
-                this.control.webContents.send("devtools", { id: this.id, enabled: false })
+                if (this.control && !this.control.isDestroyed())
+                    this.control.webContents.send("devtools", { id: this.id, enabled: false })
             }
         }
     }
@@ -319,7 +321,7 @@ img, video {
                 spellcheck:                 false,
                 additionalArguments:        [ "vingester-cfg-" + btoa(unescape(encodeURIComponent(JSON.stringify({
                     ...this.cfg,
-                    controlId:  this.control.webContents.id,
+                    controlId:  this.control ? this.control.webContents.id : 0,
                     ffmpeg:     this.ffmpeg,
                     ffmpegCwd:  electron.app.getPath("videos")
                 })))) ]
@@ -423,7 +425,8 @@ img, video {
             worker.webContents.once("did-fail-load", (ev, code, desc, url, isMainFrame) => {
                 ev.preventDefault()
                 this.log.info(`browser: worker: failed (code: ${code}, desc: ${desc}, url: ${url}, isMainFrame: ${isMainFrame})`)
-                this.control.webContents.send("message", `browser: worker: failed (code: ${code}, desc: ${desc}, url: ${url}, isMainFrame: ${isMainFrame})`)
+                if (this.control && !this.control.isDestroyed())
+                    this.control.webContents.send("message", `browser: worker: failed (code: ${code}, desc: ${desc}, url: ${url}, isMainFrame: ${isMainFrame})`)
                 resolve(false)
             })
             worker.webContents.once("did-finish-load", (ev) => {
@@ -486,7 +489,7 @@ img, video {
                 spellcheck:                 false,
                 additionalArguments:        [ "vingester-cfg-" + btoa(unescape(encodeURIComponent(JSON.stringify({
                     ...this.cfg,
-                    controlId: this.control.webContents.id,
+                    controlId: this.control ? this.control.webContents.id : 0,
                     workerId:  this.worker.webContents.id
                 })))) ]
             }
@@ -500,16 +503,19 @@ img, video {
             setTimeout(() => {
                 content.webContents.openDevTools({ mode: "detach", activate: false })
                 this.devToolsEnabled = true
-                this.control.webContents.send("devtools", { id: this.id, enabled: true })
+                if (this.control && !this.control.isDestroyed())
+                    this.control.webContents.send("devtools", { id: this.id, enabled: true })
             }, 1000)
         }
         content.webContents.on("devtools-opened", (ev) => {
             this.devToolsEnabled = true
-            this.control.webContents.send("devtools", { id: this.id, enabled: true })
+            if (this.control && !this.control.isDestroyed())
+                this.control.webContents.send("devtools", { id: this.id, enabled: true })
         })
         content.webContents.on("devtools-closed", (ev) => {
             this.devToolsEnabled = false
-            this.control.webContents.send("devtools", { id: this.id, enabled: false })
+            if (this.control && !this.control.isDestroyed())
+                this.control.webContents.send("devtools", { id: this.id, enabled: false })
         })
 
         /*  determine user-agent identifier  */
@@ -685,7 +691,8 @@ img, video {
             content.webContents.once("did-fail-load", (ev, code, desc, url, isMainFrame) => {
                 ev.preventDefault()
                 this.log.info(`browser: content: failed (code: ${code}, desc: ${desc}, url: ${url}, isMainFrame: ${isMainFrame})`)
-                this.control.webContents.send("message", `browser: content: failed (code: ${code}, desc: ${desc}, url: ${url}, isMainFrame: ${isMainFrame})`)
+                if (this.control && !this.control.isDestroyed())
+                    this.control.webContents.send("message", `browser: content: failed (code: ${code}, desc: ${desc}, url: ${url}, isMainFrame: ${isMainFrame})`)
                 this.starting = false
                 resolve(isMainFrame ? false : true)
             })
@@ -710,7 +717,7 @@ img, video {
         if (this.worker !== null) {
             this.worker.webContents.send("browser-worker-reconfigure", {
                 ...this.cfg,
-                controlId: this.control.webContents.id,
+                controlId: this.control ? this.control.webContents.id : 0,
                 workerId: this.worker.webContents.id
             })
         }

@@ -177,6 +177,10 @@ electron.app.on("ready", async () => {
     if (!(await pathExists(mediaDir)))
         await mkdirp(mediaDir, { mode: 0o755 })
 
+    /*  create main control window (skipped in headless/service mode)  */
+    let control = null
+    let updateBounds = () => {}
+    if (!headless) {
     /*  determine main window position and size  */
     log.info("loading persistant settings")
     const x = store.get("control.x", null)
@@ -192,7 +196,7 @@ electron.app.on("ready", async () => {
 
     /*  create main window  */
     log.info("creating control user interface")
-    const control = new electron.BrowserWindow({
+    control = new electron.BrowserWindow({
         ...pos,
         show:            false,
         width:           w * display.scaleFactor,
@@ -239,7 +243,7 @@ electron.app.on("ready", async () => {
     }
 
     /*  persist main window position and size  */
-    const updateBounds = () => {
+    updateBounds = () => {
         const bounds = control.getBounds()
         store.set("control.x", bounds.x)
         store.set("control.y", bounds.y)
@@ -305,6 +309,8 @@ electron.app.on("ready", async () => {
             }, 100)
         }
     })
+
+    } /* end if (!headless) control window block */
 
     /*  configure application menu  */
     const openURL = (url) =>
@@ -648,15 +654,20 @@ electron.app.on("ready", async () => {
     /*  autosave IPC handlers  */
     electron.ipcMain.handle("autosave-get-file", () => autosaveFile)
     electron.ipcMain.handle("autosave-set-file", async () => {
-        const result = await electron.dialog.showSaveDialog(control, {
+        const dialogParent = (control && !control.isDestroyed()) ? control : null
+        const dialogOpts = {
             title:       "Choose Autosave File Location (YAML)",
             filters:     [ { name: "YAML", extensions: [ "yaml" ] } ],
             defaultPath: autosaveFile || path.join(cfgDir, "autosave.yaml")
-        })
+        }
+        const result = dialogParent
+            ? await electron.dialog.showSaveDialog(dialogParent, dialogOpts)
+            : await electron.dialog.showSaveDialog(dialogOpts)
         if (!result.canceled && result.filePath) {
             autosaveFile = result.filePath
             store.set("autosave.file", autosaveFile)
-            control.webContents.send("autosave-file", autosaveFile)
+            if (control && !control.isDestroyed())
+                control.webContents.send("autosave-file", autosaveFile)
             return autosaveFile
         }
         return null
@@ -708,7 +719,8 @@ electron.app.on("ready", async () => {
     let displays = []
     const displaysDetermine = () => {
         displays = util.AvailableDisplays.determine(electron)
-        control.webContents.send("display-update", displays)
+        if (control && !control.isDestroyed())
+            control.webContents.send("display-update", displays)
     }
     displaysDetermine()
     electron.screen.on("display-added",           () => { displaysDetermine() })
@@ -720,16 +732,19 @@ electron.app.on("ready", async () => {
 
     /*  handle update check request from UI  */
     electron.ipcMain.handle("update-check", async () => {
+        if (!control || control.isDestroyed()) return
         /*  check whether we are updateable at all  */
         const updateable = await update.updateable()
         control.webContents.send("update-updateable", updateable)
 
         /*  check for update versions  */
         const versions = await update.check(throttle(1000 / 60, (task, completed) => {
-            control.webContents.send("update-progress", { task, completed })
+            if (control && !control.isDestroyed())
+                control.webContents.send("update-progress", { task, completed })
         }))
         setTimeout(() => {
-            control.webContents.send("update-progress", null)
+            if (control && !control.isDestroyed())
+                control.webContents.send("update-progress", null)
         }, 2 * (1000 / 60))
         control.webContents.send("update-versions", versions)
     })
@@ -737,9 +752,11 @@ electron.app.on("ready", async () => {
     /*  handle update request from UI  */
     electron.ipcMain.handle("update-to-version", (event, version) => {
         update.update(version, throttle(1000 / 60, (task, completed) => {
-            control.webContents.send("update-progress", { task, completed })
+            if (control && !control.isDestroyed())
+                control.webContents.send("update-progress", { task, completed })
         })).catch((err) => {
-            control.webContents.send("update-error", err)
+            if (control && !control.isDestroyed())
+                control.webContents.send("update-error", err)
             log.error(`update: ERROR: ${err}`)
         })
     })
@@ -812,14 +829,14 @@ electron.app.on("ready", async () => {
                 throw new Error("browser already running")
             if (!browser.valid())
                 throw new Error("browser configuration not valid")
-            control.webContents.send("browser-start", id)
+            if (control && !control.isDestroyed()) control.webContents.send("browser-start", id)
             const success = await browser.start()
             if (success) {
-                control.webContents.send("browser-started", id)
+                if (control && !control.isDestroyed()) control.webContents.send("browser-started", id)
                 syslog.info("instance", `started: "${browser.cfg.t}" (id=${id})`)
             }
             else {
-                control.webContents.send("browser-failed", id)
+                if (control && !control.isDestroyed()) control.webContents.send("browser-failed", id)
                 syslog.error("instance", `start failed: "${browser.cfg.t}" (id=${id})`)
                 browser.stop()
             }
@@ -831,9 +848,9 @@ electron.app.on("ready", async () => {
                 throw new Error("invalid browser id")
             if (!browser.running())
                 throw new Error("browser still not running")
-            control.webContents.send("browser-reload", id)
+            if (control && !control.isDestroyed()) control.webContents.send("browser-reload", id)
             browser.reload()
-            control.webContents.send("browser-reloaded", id)
+            if (control && !control.isDestroyed()) control.webContents.send("browser-reloaded", id)
             syslog.info("instance", `reloaded: "${browser.cfg.t}" (id=${id})`)
         }
         else if (action === "stop") {
@@ -843,9 +860,9 @@ electron.app.on("ready", async () => {
                 throw new Error("invalid browser id")
             if (!browser.running())
                 throw new Error("browser still not running")
-            control.webContents.send("browser-stop", id)
+            if (control && !control.isDestroyed()) control.webContents.send("browser-stop", id)
             await browser.stop()
-            control.webContents.send("browser-stopped", id)
+            if (control && !control.isDestroyed()) control.webContents.send("browser-stopped", id)
             syslog.info("instance", `stopped: "${browser.cfg.t}" (id=${id})`)
         }
         else if (action === "clear") {
@@ -855,34 +872,17 @@ electron.app.on("ready", async () => {
                 throw new Error("invalid browser id")
             if (browser.running())
                 throw new Error("browser still running")
-            control.webContents.send("browser-clear", id)
+            if (control && !control.isDestroyed()) control.webContents.send("browser-clear", id)
             await browser.clear()
-            control.webContents.send("browser-cleared", id)
+            if (control && !control.isDestroyed()) control.webContents.send("browser-cleared", id)
         }
     }
     electron.ipcMain.handle("control", (ev, action, id, browser) => {
         return controlBrowser(action, id, browser)
     })
 
-    /*  show the window once the DOM was mounted  */
-    electron.ipcMain.handle("control-mounted", (ev) => {
-        /*  bring user interface into final state   */
-        if (headless) {
-            log.info("headless mode: control window remains hidden; manage via WebUI")
-        }
-        else if (initiallyMinimized) {
-            log.info("bring user interface into final state (minimized)")
-            control.minimize()
-        }
-        else {
-            log.info("bring user interface into final state (shown and focused)")
-            control.show()
-            control.focus()
-        }
-
-        /*  auto-start browser instances:
-            1. --autostart flag starts all instances
-            2. InstanceAutoStart (as) per-instance flag starts specific instances  */
+    /*  shared autostart trigger — used by both headless and windowed paths  */
+    const triggerAutostart = () => {
         if (autostart) {
             setTimeout(() => {
                 log.info("auto-start all browser instances (--autostart flag)")
@@ -902,51 +902,78 @@ electron.app.on("ready", async () => {
                 }
             }, 2000)
         }
-    })
+    }
 
-    /*  load web content  */
-    log.info("loading control user interface")
-    control.loadURL(`file://${path.join(__dirname, "vingester-control.html")}`)
-    control.webContents.on("did-fail-load", (ev) => {
-        electron.app.quit()
-    })
-
-    /*  wait until control UI is created  */
-    log.info("awaiting control user interface to become ready")
-    let controlReady = false
-    electron.ipcMain.handle("control-created", (ev) => {
-        controlReady = true
-    })
-    await new Promise((resolve) => {
-        const check = () => {
-            if (controlReady)
-                resolve()
-            else
-                setTimeout(check, 100)
-        }
-        setTimeout(check, 100)
-    })
-
-    /*  send parameters  */
-    if (tag !== null)
-        control.webContents.send("tag", tag)
-    control.webContents.send("autosave-file", autosaveFile)
-
-    /*  toggle GPU hardware acceleration  */
-    log.info("send GPU status and provide IPC hook for GPU status change")
-    control.webContents.send("gpu", !!store.get("gpu"))
-    electron.ipcMain.handle("gpu", async (ev, gpu) => {
-        const choice = electron.dialog.showMessageBoxSync(control, {
-            message: `${gpu ? "Enabling" : "Disabling"} GPU hardware acceleration ` +
-                "requires an application restart.",
-            type: "question",
-            buttons: [ "Restart", "Cancel" ],
-            cancelId: 1
+    if (headless) {
+        /*  headless/service mode: load browser configs directly — no control window involved  */
+        log.info("headless mode: loading browser configs directly (no control window)")
+        const cfgs = loadConfigs()
+        for (const cfg of cfgs)
+            await controlBrowser("add", cfg.id, cfg)
+        triggerAutostart()
+    }
+    else {
+        /*  windowed mode: show the window once the Vue DOM is mounted  */
+        electron.ipcMain.handle("control-mounted", (ev) => {
+            if (initiallyMinimized) {
+                log.info("bring user interface into final state (minimized)")
+                control.minimize()
+            }
+            else {
+                log.info("bring user interface into final state (shown and focused)")
+                control.show()
+                control.focus()
+            }
+            triggerAutostart()
         })
-        if (choice === 1)
-            return
+
+        /*  load web content  */
+        log.info("loading control user interface")
+        control.loadURL(`file://${path.join(__dirname, "vingester-control.html")}`)
+        control.webContents.on("did-fail-load", () => {
+            electron.app.quit()
+        })
+
+        /*  wait until control UI is created  */
+        log.info("awaiting control user interface to become ready")
+        let controlReady = false
+        electron.ipcMain.handle("control-created", (ev) => {
+            controlReady = true
+        })
+        await new Promise((resolve) => {
+            const check = () => {
+                if (controlReady)
+                    resolve()
+                else
+                    setTimeout(check, 100)
+            }
+            setTimeout(check, 100)
+        })
+
+        /*  send parameters  */
+        if (tag !== null)
+            control.webContents.send("tag", tag)
+        control.webContents.send("autosave-file", autosaveFile)
+        control.webContents.send("gpu", !!store.get("gpu"))
+    }
+
+    /*  toggle GPU hardware acceleration (IPC hook — for windowed mode)  */
+    log.info("provide IPC hook for GPU status change")
+    electron.ipcMain.handle("gpu", async (ev, gpu) => {
+        if (control && !control.isDestroyed()) {
+            const choice = electron.dialog.showMessageBoxSync(control, {
+                message: `${gpu ? "Enabling" : "Disabling"} GPU hardware acceleration ` +
+                    "requires an application restart.",
+                type: "question",
+                buttons: [ "Restart", "Cancel" ],
+                cancelId: 1
+            })
+            if (choice === 1)
+                return
+        }
         store.set("gpu", gpu)
-        control.webContents.send("gpu", gpu)
+        if (control && !control.isDestroyed())
+            control.webContents.send("gpu", gpu)
         electron.app.relaunch()
         electron.app.exit()
     })
@@ -1055,11 +1082,12 @@ electron.app.on("ready", async () => {
         port:    store.get("api.port")
     })
     log.info("send API status and provide IPC hook for API status change")
-    control.webContents.send("api", {
-        enabled: api.enabled,
-        addr:    api.addr,
-        port:    api.port
-    })
+    if (control && !control.isDestroyed())
+        control.webContents.send("api", {
+            enabled: api.enabled,
+            addr:    api.addr,
+            port:    api.port
+        })
     electron.ipcMain.handle("api", async (ev, cfg) => {
         store.set("api.enabled", cfg.enabled)
         store.set("api.addr",    cfg.addr)
@@ -1077,12 +1105,12 @@ electron.app.on("ready", async () => {
             this.app     = null
             this.server  = null
             this.enabled = false
-            this.addr    = "127.0.0.1"
+            this.addr    = "0.0.0.0"
             this.port    = "7212"
         }
         async configure (cfg) {
             this.enabled = cfg.enabled ?? false
-            this.addr    = cfg.addr    ?? "127.0.0.1"
+            this.addr    = cfg.addr    ?? "0.0.0.0"
             this.port    = cfg.port    ?? "7212"
             if (this.enabled && !this.server)
                 await this.start()
@@ -1104,7 +1132,7 @@ electron.app.on("ready", async () => {
                 next()
             })
 
-            /*  helper: persist in-memory browsers to store and notify Control UI  */
+            /*  helper: persist in-memory browsers to store and optionally notify Control UI  */
             const debouncedAutosave = debounce(10 * 1000, performAutosave)
             const saveBrowsersToStore = () => {
                 const cfgArray = Object.keys(browsers).map((bid) => ({ id: bid, ...browsers[bid].cfg }))
@@ -1334,6 +1362,135 @@ electron.app.on("ready", async () => {
                 }
             }))
 
+            /*  REST API: get all app settings  */
+            this.app.get("/api/settings", (req, res) => {
+                res.status(200).json({
+                    api: {
+                        enabled: store.get("api.enabled",     false),
+                        addr:    store.get("api.addr",        "127.0.0.1"),
+                        port:    store.get("api.port",        "7211")
+                    },
+                    webui: {
+                        addr: webui.addr,
+                        port: webui.port
+                    },
+                    syslog: {
+                        enabled: store.get("syslog.enabled", false),
+                        ip:      store.get("syslog.ip",      ""),
+                        port:    store.get("syslog.port",    514)
+                    },
+                    autosave: {
+                        file: autosaveFile || ""
+                    },
+                    gpu: !!store.get("gpu")
+                })
+            })
+
+            /*  REST API: update app settings  */
+            this.app.patch("/api/settings", wrap(async (req, res) => {
+                const body = req.body || {}
+
+                if (body.api !== undefined) {
+                    const cfg = body.api
+                    if (cfg.enabled !== undefined) store.set("api.enabled", cfg.enabled)
+                    if (cfg.addr    !== undefined) store.set("api.addr",    cfg.addr)
+                    if (cfg.port    !== undefined) store.set("api.port",    cfg.port)
+                    await api.configure({
+                        enabled: store.get("api.enabled", false),
+                        addr:    store.get("api.addr",    "127.0.0.1"),
+                        port:    store.get("api.port",    "7211")
+                    })
+                }
+
+                if (body.webui !== undefined) {
+                    const cfg = body.webui
+                    if (cfg.addr !== undefined) store.set("webui.addr", cfg.addr)
+                    if (cfg.port !== undefined) store.set("webui.port", cfg.port)
+                    /*  note: port/addr changes take effect on next restart  */
+                }
+
+                if (body.syslog !== undefined) {
+                    const cfg = body.syslog
+                    if (cfg.enabled !== undefined) store.set("syslog.enabled", cfg.enabled)
+                    if (cfg.ip      !== undefined) store.set("syslog.ip",      cfg.ip)
+                    if (cfg.port    !== undefined) store.set("syslog.port",    cfg.port)
+                    syslog.configure({
+                        enabled: store.get("syslog.enabled", false),
+                        ip:      store.get("syslog.ip",      ""),
+                        port:    store.get("syslog.port",    514)
+                    })
+                }
+
+                if (body.autosave !== undefined) {
+                    if (body.autosave.file !== undefined) {
+                        autosaveFile = body.autosave.file
+                        store.set("autosave.file", autosaveFile)
+                    }
+                }
+
+                if (body.gpu !== undefined) {
+                    store.set("gpu", !!body.gpu)
+                    /*  note: GPU change takes effect on next restart  */
+                }
+
+                res.status(200).json({ ok: true })
+            }))
+
+            /*  REST API: trigger autosave now  */
+            this.app.post("/api/settings/autosave", wrap(async (req, res) => {
+                await performAutosave()
+                res.status(200).json({ ok: true, file: autosaveFile })
+            }))
+
+            /*  REST API: export config as YAML download  */
+            this.app.get("/api/settings/config", wrap(async (req, res) => {
+                const tmpFile = path.join(electron.app.getPath("temp"),
+                    `webretriever-export-${Date.now()}.yaml`)
+                await exportConfig(tmpFile)
+                res.set("Content-Disposition", "attachment; filename=\"webretriever-config.yaml\"")
+                res.set("Content-Type", "application/x-yaml")
+                const data = await fs.promises.readFile(tmpFile)
+                await fs.promises.unlink(tmpFile).catch(() => {})
+                res.status(200).send(data)
+            }))
+
+            /*  REST API: import config from YAML upload  */
+            const configUpload = multer({
+                dest: electron.app.getPath("temp"),
+                limits: { fileSize: 10 * 1024 * 1024 }
+            })
+            this.app.post("/api/settings/config", configUpload.single("config"),
+                wrap(async (req, res) => {
+                    if (!req.file)
+                        return res.status(400).json({ error: "no file uploaded" })
+                    const uploadedPath = req.file.path
+                    await importConfig(uploadedPath)
+                    await fs.promises.unlink(uploadedPath).catch(() => {})
+                    await controlBrowser("prune")
+                    const cfgs = loadConfigs()
+                    for (const cfg of cfgs)
+                        await controlBrowser("add", cfg.id, cfg)
+                    saveBrowsersToStore()
+                    log.info("WebUI: imported config and reloaded browser instances")
+                    res.status(200).json({ ok: true, count: cfgs.length })
+                })
+            )
+
+            /*  REST API: graceful shutdown  */
+            this.app.post("/api/shutdown", wrap(async (req, res) => {
+                res.status(200).json({ ok: true })
+                setTimeout(() => electron.app.quit(), 500)
+            }))
+
+            /*  REST API: restart app (for GPU/port changes)  */
+            this.app.post("/api/restart", wrap(async (req, res) => {
+                res.status(200).json({ ok: true })
+                setTimeout(() => {
+                    electron.app.relaunch()
+                    electron.app.quit()
+                }, 500)
+            }))
+
             /*  global error handler  */
             this.app.use((err, req, res, next) => {
                 log.error(`WebUI: unhandled error: ${err.message}`)
@@ -1360,32 +1517,33 @@ electron.app.on("ready", async () => {
     log.info("create Web UI")
     const webui = new WebUI()
     await webui.configure({
-        enabled: store.get("webui.enabled"),
-        addr:    store.get("webui.addr"),
-        port:    store.get("webui.port")
+        enabled: true,  /* always start — web UI is the primary interface */
+        addr:    store.get("webui.addr", "0.0.0.0"),
+        port:    store.get("webui.port", "7212")
     }).catch((err) => {
         log.error(`WebUI: failed to start: ${err.message}`)
     })
     log.info("send Web UI status and provide IPC hook for Web UI status change")
-    control.webContents.send("webui", {
-        enabled: webui.enabled,
-        addr:    webui.addr,
-        port:    webui.port
-    })
+    if (control && !control.isDestroyed())
+        control.webContents.send("webui", {
+            enabled: webui.enabled,
+            addr:    webui.addr,
+            port:    webui.port
+        })
     electron.ipcMain.handle("webui", async (ev, cfg) => {
-        store.set("webui.enabled", cfg.enabled)
-        store.set("webui.addr",    cfg.addr)
-        store.set("webui.port",    cfg.port)
+        store.set("webui.addr", cfg.addr)
+        store.set("webui.port", cfg.port)
         try {
             await webui.configure({
-                enabled: cfg.enabled,
+                enabled: true,
                 addr:    cfg.addr,
                 port:    cfg.port
             })
         }
         catch (err) {
             log.error(`WebUI: configure failed: ${err.message}`)
-            control.webContents.send("webui-error", err.message)
+            if (control && !control.isDestroyed())
+                control.webContents.send("webui-error", err.message)
         }
     })
 
@@ -1401,14 +1559,16 @@ electron.app.on("ready", async () => {
         store.set("syslog.port",    cfg.port)
         syslog.configure({ enabled: cfg.enabled, ip: cfg.ip, port: cfg.port })
         syslog.info("app", `syslog configured: ${cfg.enabled ? `${cfg.ip}:${cfg.port}` : "disabled"}`)
-        control.webContents.send("syslog", { enabled: cfg.enabled, ip: cfg.ip, port: cfg.port })
+        if (control && !control.isDestroyed())
+            control.webContents.send("syslog", { enabled: cfg.enabled, ip: cfg.ip, port: cfg.port })
     })
     /*  send initial syslog state to control UI  */
-    control.webContents.send("syslog", {
-        enabled: store.get("syslog.enabled", false),
-        ip:      store.get("syslog.ip",      ""),
-        port:    store.get("syslog.port",    514)
-    })
+    if (control && !control.isDestroyed())
+        control.webContents.send("syslog", {
+            enabled: store.get("syslog.enabled", false),
+            ip:      store.get("syslog.ip",      ""),
+            port:    store.get("syslog.port",    514)
+        })
 
     /*  collect metrics  */
     log.info("start usage gathering timer")
@@ -1422,7 +1582,8 @@ electron.app.on("ready", async () => {
         for (const metric of metrics)
             usage += metric.cpu.percentCPUUsage
         usages.record(usage, (stat) => {
-            control.webContents.send("usage", stat.avg)
+            if (control && !control.isDestroyed())
+                control.webContents.send("usage", stat.avg)
             /*  alert via syslog if CPU exceeds 80% for 3 consecutive readings (~30s)  */
             if (stat.avg >= 80) {
                 cpuHighCount++
@@ -1450,17 +1611,20 @@ electron.app.on("ready", async () => {
         if (await pathExists(configFile)) {
             log.info(`loading auto-import/export configuration: "${configFile}"`)
             await importConfig(configFile)
-            control.webContents.send("load")
+            if (control && !control.isDestroyed())
+                control.webContents.send("load")
         }
         else
             log.warn(`auto-import/export configuration not found: "${configFile}"`)
     }
 
     /*  gracefully shutdown application  */
-    log.info("hook into control user interface window states")
-    control.on("close", async (ev) => {
+    log.info("registering shutdown handler (before-quit)")
+    let shuttingDown = false
+    const performShutdown = async () => {
+        if (shuttingDown) return
+        shuttingDown = true
         log.info("shutting down")
-        ev.preventDefault()
 
         /*  stop usage timer  */
         if (timer !== null) {
@@ -1479,41 +1643,50 @@ electron.app.on("ready", async () => {
         await controlBrowser("stop-all", null)
 
         /*  stop API  */
-        if (api.hapi)
+        if (api.server)
             await api.stop()
 
         /*  stop Web UI  */
-        if (webui.hapi)
+        if (webui.server)
             await webui.stop()
 
         /*  optionally auto-export configuration  */
-        if (configFile !== null) {
-            control.webContents.send("save")
-            await new Promise((resolve) => setTimeout(resolve, 500))
+        if (configFile !== null)
             await exportConfig(configFile)
-        }
 
-        /*  save window bounds  */
+        /*  save window bounds (windowed mode only)  */
         updateBounds()
 
-        /*  destroy control user interface  */
-        control.destroy()
-    })
-    electron.app.on("window-all-closed", () => {
         /*  optionally destroy NDI library  */
         if (grandiose.isSupportedCPU())
             grandiose.destroy()
+    }
 
-        /*  finally destroy electron  */
-        electron.app.quit()
+    electron.app.on("before-quit", async (ev) => {
+        if (shuttingDown) return
+        ev.preventDefault()
+        await performShutdown()
+        electron.app.exit(0)
     })
+
+    /*  in windowed mode: close control window → triggers before-quit via destroy()  */
+    if (control) {
+        control.on("close", async (ev) => {
+            ev.preventDefault()
+            await performShutdown()
+            control.destroy()
+        })
+    }
+
+    /*  in headless mode: keep running when all browser instances are stopped  */
+    electron.app.on("window-all-closed", () => {
+        if (!headless)
+            electron.app.quit()
+        /*  headless: do nothing — service keeps running until SIGTERM/before-quit  */
+    })
+
     for (const signal of [ "SIGINT", "SIGTERM" ]) {
         process.on(signal, () => {
-            /*  optionally destroy NDI library  */
-            if (grandiose.isSupportedCPU())
-                grandiose.destroy()
-
-            /*  finally destroy electron  */
             electron.app.quit()
         })
     }

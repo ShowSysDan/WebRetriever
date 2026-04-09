@@ -94,8 +94,9 @@ class BrowserWorker {
                     else if (conns > 0)        this.ndiStatus = "connected"
 
                     /*  send tally status  */
-                    electron.ipcRenderer.sendTo(this.cfg.controlId, "tally",
-                        { status: this.ndiStatus, connections: conns, id: this.id })
+                    if (this.cfg.controlId)
+                        electron.ipcRenderer.sendTo(this.cfg.controlId, "tally",
+                            { status: this.ndiStatus, connections: conns, id: this.id })
                     electron.ipcRenderer.send("tally",
                         { status: this.ndiStatus, connections: conns, id: this.id })
                 }, 1 * 500)
@@ -118,8 +119,9 @@ class BrowserWorker {
                 })
                 this.ffmpeg.on("fatal", (msg) => {
                     this.log.error(`FFmpeg fatal error: ${msg}`)
-                    electron.ipcRenderer.sendTo(this.cfg.controlId, "message",
-                        `FFmpeg fatal error: ${msg}`)
+                    if (this.cfg.controlId)
+                        electron.ipcRenderer.sendTo(this.cfg.controlId, "message",
+                            `FFmpeg fatal error: ${msg}`)
                 })
                 await this.ffmpeg.start()
             }
@@ -237,9 +239,10 @@ class BrowserWorker {
             else
                 util.ImageBufferAdjustment.BGRAtoRGBA(buffer2)
 
-            /*  send result to control UI  */
-            electron.ipcRenderer.sendTo(this.cfg.controlId, "capture",
-                { buffer: buffer2, size: size2, id: this.id })
+            /*  send result to control UI (only if control window exists)  */
+            if (this.cfg.controlId)
+                electron.ipcRenderer.sendTo(this.cfg.controlId, "capture",
+                    { buffer: buffer2, size: size2, id: this.id })
         }
 
         /*  send video frame  */
@@ -299,14 +302,16 @@ class BrowserWorker {
         /*  end time-keeping  */
         const t1 = Date.now()
         this.burst1.record(t1 - t0, (stat) => {
-            electron.ipcRenderer.sendTo(this.cfg.controlId, "burst",
-                { ...stat, type: "video", id: this.id })
+            if (this.cfg.controlId)
+                electron.ipcRenderer.sendTo(this.cfg.controlId, "burst",
+                    { ...stat, type: "video", id: this.id })
         })
 
         /*  track packets per second  */
         this.videopps.record((pps) => {
-            electron.ipcRenderer.sendTo(this.cfg.controlId, "rate",
-                { pps, type: "video", id: this.id })
+            if (this.cfg.controlId)
+                electron.ipcRenderer.sendTo(this.cfg.controlId, "rate",
+                    { pps, type: "video", id: this.id })
         })
     }
 
@@ -380,14 +385,16 @@ class BrowserWorker {
         /*  end time-keeping  */
         const t1 = Date.now()
         this.burst2.record(t1 - t0, (stat) => {
-            electron.ipcRenderer.sendTo(this.cfg.controlId, "burst",
-                { ...stat, type: "audio", id: this.id })
+            if (this.cfg.controlId)
+                electron.ipcRenderer.sendTo(this.cfg.controlId, "burst",
+                    { ...stat, type: "audio", id: this.id })
         })
 
         /*  track packets per second  */
         this.audiopps.record((pps) => {
-            electron.ipcRenderer.sendTo(this.cfg.controlId, "rate",
-                { pps, type: "audio", id: this.id })
+            if (this.cfg.controlId)
+                electron.ipcRenderer.sendTo(this.cfg.controlId, "rate",
+                    { pps, type: "audio", id: this.id })
         })
     }
 }
