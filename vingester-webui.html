@@ -2173,7 +2173,19 @@
                 },
                 gpu: document.getElementById("cfg-gpu").checked
             }
-            await api("/api/settings", { method: "PATCH", body: JSON.stringify(body) })
+            const r = await api("/api/settings", {
+                method:  "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body:    JSON.stringify(body)
+            })
+            const errEl = document.getElementById("err-settings")
+            if (!r.ok) {
+                errEl.textContent = "Settings save failed: " + (r.error || "unknown error")
+                errEl.style.display = "block"
+            }
+            else {
+                errEl.style.display = "none"
+            }
         },
         async autosaveNow () {
             const r = await api("/api/settings/autosave", { method: "POST" })

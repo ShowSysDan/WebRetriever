@@ -733,20 +733,14 @@ electron.app.on("ready", async () => {
     /*  handle update check request from UI  */
     electron.ipcMain.handle("update-check", async () => {
         if (!control || control.isDestroyed()) return
-        /*  check whether we are updateable at all  */
+        const send = (...args) => { if (control && !control.isDestroyed()) control.webContents.send(...args) }
         const updateable = await update.updateable()
-        control.webContents.send("update-updateable", updateable)
-
-        /*  check for update versions  */
+        send("update-updateable", updateable)
         const versions = await update.check(throttle(1000 / 60, (task, completed) => {
-            if (control && !control.isDestroyed())
-                control.webContents.send("update-progress", { task, completed })
+            send("update-progress", { task, completed })
         }))
-        setTimeout(() => {
-            if (control && !control.isDestroyed())
-                control.webContents.send("update-progress", null)
-        }, 2 * (1000 / 60))
-        control.webContents.send("update-versions", versions)
+        setTimeout(() => send("update-progress", null), 2 * (1000 / 60))
+        send("update-versions", versions)
     })
 
     /*  handle update request from UI  */
@@ -772,11 +766,13 @@ electron.app.on("ready", async () => {
     const browsers = {}
     const controlBrowser = async (action, id, cfg) => {
         if (action === "prune") {
+            const stopPromises = []
             for (const id of Object.keys(browsers)) {
                 if (browsers[id].running())
-                    browsers[id].stop()
+                    stopPromises.push(browsers[id].stop())
                 delete browsers[id]
             }
+            await Promise.all(stopPromises)
         }
         else if (action === "add") {
             /*  add browser configuration  */
@@ -1628,7 +1624,7 @@ electron.app.on("ready", async () => {
 
         /*  stop usage timer  */
         if (timer !== null) {
-            clearTimeout(timer)
+            clearInterval(timer)
             timer = null
         }
 
@@ -1665,16 +1661,30 @@ electron.app.on("ready", async () => {
     electron.app.on("before-quit", async (ev) => {
         if (shuttingDown) return
         ev.preventDefault()
-        await performShutdown()
-        electron.app.exit(0)
+        try {
+            await performShutdown()
+        }
+        catch (err) {
+            log.error(`shutdown error: ${err.message}`)
+        }
+        finally {
+            electron.app.exit(0)
+        }
     })
 
     /*  in windowed mode: close control window → triggers before-quit via destroy()  */
     if (control) {
         control.on("close", async (ev) => {
             ev.preventDefault()
-            await performShutdown()
-            control.destroy()
+            try {
+                await performShutdown()
+            }
+            catch (err) {
+                log.error(`shutdown error: ${err.message}`)
+            }
+            finally {
+                control.destroy()
+            }
         })
     }
 
